@@ -2,7 +2,7 @@ import selection from '../selection'
 import { tokenizer } from '../parser/parse'
 import { conflict, isMetaKey } from '../utils'
 import { getTextContent } from '../utils/domManipulate'
-import { CLASS_OR_ID, EVENT_KEYS, turndownConfig } from '../config'
+import { CLASS_OR_ID, EVENT_KEYS, DEFAULT_TURNDOWN_CONFIG } from '../config'
 
 const INLINE_UPDATE_FREGMENTS = [
   '^([*+-]\\s)', // Bullet list
@@ -117,6 +117,12 @@ const updateCtrl = ContentState => {
     block.children[0].text = block.children[0].text.substring(marker.length)
     newBlock.listItemType = type
     newBlock.isLooseListItem = preferLooseListItem
+
+    if (type === 'task' || type === 'bullet') {
+      const { bulletListMarker } = this
+      const bulletListItemMarker = marker ? marker.charAt(0) : bulletListMarker
+      newBlock.bulletListItemMarker = bulletListItemMarker
+    }
 
     if (
       preSibling && preSibling.listType === type && this.checkSameLooseType(preSibling, preferLooseListItem) &&
@@ -234,7 +240,7 @@ const updateCtrl = ContentState => {
   ContentState.prototype.updateHeader = function (block, header, text) {
     const newType = `h${header.length}`
     if (block.type !== newType) {
-      block.headingStyle = turndownConfig.headingStyle
+      block.headingStyle = DEFAULT_TURNDOWN_CONFIG.headingStyle
       block.type = newType
       block.text = text
       block.children.length = 0
@@ -278,6 +284,13 @@ const updateCtrl = ContentState => {
     return null
   }
 
+  ContentState.prototype.updateMathContent = function (block) {
+    const preBlock = this.getParent(block)
+    const mathPreview = this.getNextSibling(preBlock)
+    const math = preBlock.children.map(line => line.text).join('\n')
+    mathPreview.math = math
+  }
+
   ContentState.prototype.updateState = function (event) {
     const { floatBox } = this
     const { start, end } = selection.getCursorRange()
@@ -308,7 +321,7 @@ const updateCtrl = ContentState => {
       this.removeBlocks(startBlock, endBlock)
       // there still has little bug, when the oldstart block is `pre`, the input value will be ignored.
       // and act as `backspace`
-      if (startBlock.type === 'pre' && startBlock.functionType !== 'frontmatter') {
+      if (startBlock.type === 'pre' && /code|html/.test(startBlock.functionType)) {
         event.preventDefault()
         const startRemainText = startBlock.type === 'pre'
           ? startBlock.text.substring(0, oldStart.offset - 1)
@@ -373,7 +386,7 @@ const updateCtrl = ContentState => {
       }
     }
 
-    if (block && block.type === 'pre' && block.functionType !== 'frontmatter') {
+    if (block && block.type === 'pre' && /code|html/.test(block.functionType)) {
       if (block.key !== oldKey) {
         this.cursor = lastCursor = { start, end }
         if (event.type === 'click' && oldKey) {
@@ -382,6 +395,7 @@ const updateCtrl = ContentState => {
       }
       return
     }
+
     // auto pair
     if (block && block.text !== text) {
       const BRACKET_HASH = {
@@ -417,13 +431,16 @@ const updateCtrl = ContentState => {
       block.text = text
     }
 
+    if (block && block.type === 'span' && block.functionType === 'multiplemath') {
+      this.updateMathContent(block)
+    }
+
     if (oldKey !== key || oldStart.offset !== start.offset || oldEnd.offset !== end.offset) {
       needRender = true
     }
     this.cursor = lastCursor = { start, end }
     const checkMarkedUpdate = this.checkNeedRender(block)
-    const inlineUpdatedBlock = this.isCollapse() && block.functionType !== 'frontmatter' && this.checkInlineUpdate(block)
-
+    const inlineUpdatedBlock = this.isCollapse() && !/frontmatter|multiplemath/.test(block.functionType) && this.checkInlineUpdate(block)
     if (checkMarkedUpdate || inlineUpdatedBlock || needRender) {
       this.partialRender()
     }

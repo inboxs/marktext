@@ -1,4 +1,4 @@
-import { HAS_TEXT_BLOCK_REG } from '../config'
+import { HAS_TEXT_BLOCK_REG, DEFAULT_TURNDOWN_CONFIG } from '../config'
 import { setCursorAtLastLine } from '../codeMirror'
 import { getUniqueId } from '../utils'
 import selection from '../selection'
@@ -8,6 +8,7 @@ import updateCtrl from './updateCtrl'
 import backspaceCtrl from './backspaceCtrl'
 import codeBlockCtrl from './codeBlockCtrl'
 import tableBlockCtrl from './tableBlockCtrl'
+import selectionCtrl from './selectionCtrl'
 import History from './history'
 import arrowCtrl from './arrowCtrl'
 import pasteCtrl from './pasteCtrl'
@@ -24,6 +25,7 @@ import importMarkdown from '../utils/importMarkdown'
 const prototypes = [
   tabCtrl,
   enterCtrl,
+  selectionCtrl,
   updateCtrl,
   backspaceCtrl,
   codeBlockCtrl,
@@ -42,19 +44,19 @@ const prototypes = [
 
 class ContentState {
   constructor (options) {
-    const { eventCenter } = options
+    const { eventCenter, bulletListMarker } = options
     Object.assign(this, options)
     // Use to cache the keys which you don't want to remove.
     this.exemption = new Set()
     this.blocks = [ this.createBlockP() ]
     this.stateRender = new StateRender(eventCenter)
     this.codeBlocks = new Map()
-    this.loadMathMap = new Map()
     this.renderRange = [ null, null ]
     this.currentCursor = null
     this.prevCursor = null
     this.historyTimer = null
     this.history = new History(this)
+    this.turndownConfig = Object.assign(DEFAULT_TURNDOWN_CONFIG, { bulletListMarker })
     this.init()
   }
 
@@ -119,12 +121,13 @@ class ContentState {
   setCursor () {
     const { start: { key } } = this.cursor
     const block = this.getBlock(key)
-    if (block.type === 'pre' && block.functionType !== 'frontmatter') {
+    if (block.type === 'pre' && /code|html/.test(block.functionType)) {
       const cm = this.codeBlocks.get(key)
-      const { pos } = block
-      if (pos) {
+      const { selection } = block
+      if (selection) {
+        const { anchor, head } = selection
         cm.focus()
-        cm.setCursor(pos)
+        cm.setSelection(anchor, head)
       } else {
         setCursorAtLastLine(cm)
       }
@@ -152,7 +155,6 @@ class ContentState {
     this.setNextRenderRange()
     this.stateRender.render(blocks, cursor, activeBlocks, matches)
     this.pre2CodeMirror(isRenderCursor)
-    this.renderMath()
     if (isRenderCursor) this.setCursor()
   }
 
@@ -171,7 +173,6 @@ class ContentState {
     this.setNextRenderRange()
     this.stateRender.partialRender(needRenderBlocks, cursor, activeBlocks, matches, startKey, endKey)
     this.pre2CodeMirror(true, [...new Set([cursorOutMostBlock, ...needRenderBlocks])])
-    this.renderMath([...new Set([cursorOutMostBlock, ...needRenderBlocks])])
     this.setCursor()
   }
 
@@ -179,12 +180,13 @@ class ContentState {
    * A block in Aganippe present a paragraph(block syntax in GFM) or a line in paragraph.
    * a line block must in a `p block` or `pre block(frontmatter)` and `p block`'s children must be line blocks.
    */
-  createBlock (type = 'span', text = '') { // span type means it is a line block.
+  createBlock (type = 'span', text = '', editable = true) { // span type means it is a line block.
     const key = getUniqueId()
     return {
       key,
       type,
       text,
+      editable,
       parent: null,
       preSibling: null,
       nextSibling: null,
@@ -306,7 +308,7 @@ class ContentState {
       if (children.length) {
         children.forEach(child => this.removeTextOrBlock(child))
       }
-    } else {
+    } else if (block.editable) {
       this.removeBlock(block)
     }
   }
@@ -361,8 +363,8 @@ class ContentState {
     if (!afterEnd) {
       const parent = this.getParent(after)
       if (parent) {
-        const isOnlyChild = this.isOnlyChild(after)
-        this.removeBlocks(before, parent, isOnlyChild, true)
+        const removeAfter = isRemoveAfter && this.isOnlyEditableChild(after)
+        this.removeBlocks(before, parent, removeAfter, true)
       }
     }
     if (isRemoveAfter) {
@@ -501,10 +503,19 @@ class ContentState {
     return !block.nextSibling && !block.preSibling
   }
 
+  isOnlyEditableChild (block) {
+    if (block.editable === false) return false
+    const parent = this.getParent(block)
+    if (!parent) throw new Error('isOnlyEditableChild method only apply for child block')
+    return parent.children.filter(child => child.editable).length === 1
+  }
+
   getLastChild (block) {
-    const len = block.children.length
-    if (len) {
-      return block.children[len - 1]
+    if (block) {
+      const len = block.children.length
+      if (len) {
+        return block.children[len - 1]
+      }
     }
     return null
   }

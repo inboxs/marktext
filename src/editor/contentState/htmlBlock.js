@@ -8,8 +8,7 @@ const DOMPurify = createDOMPurify(window)
 
 const htmlBlock = ContentState => {
   ContentState.prototype.createToolBar = function (tools, toolBarType) {
-    const toolBar = this.createBlock('div')
-    toolBar.editable = false
+    const toolBar = this.createBlock('div', '', false)
     toolBar.toolBarType = toolBarType
     const ul = this.createBlock('ul')
 
@@ -25,19 +24,18 @@ const htmlBlock = ContentState => {
     return toolBar
   }
 
-  ContentState.prototype.createCodeInHtml = function (code, pos) {
+  ContentState.prototype.createCodeInHtml = function (code, selection) {
     const codeContainer = this.createBlock('div')
     codeContainer.functionType = 'html'
-    const preview = this.createBlock('div')
-    preview.editable = false
+    const preview = this.createBlock('div', '', false)
     preview.htmlContent = DOMPurify.sanitize(escapeInBlockHtml(code), DOMPURIFY_CONFIG)
     preview.functionType = 'preview'
     const codePre = this.createBlock('pre')
     codePre.lang = 'html'
     codePre.functionType = 'html'
     codePre.text = code
-    if (pos) {
-      codePre.pos = pos
+    if (selection) {
+      codePre.selection = selection
     }
     this.appendChild(codeContainer, codePre)
     this.appendChild(codeContainer, preview)
@@ -100,12 +98,16 @@ const htmlBlock = ContentState => {
       line: isVoidTag ? 0 : 1,
       ch: isVoidTag ? text.length : 0
     }
+    const range = {
+      anchor: pos,
+      head: pos
+    }
     block.type = 'figure'
     block.functionType = 'html'
     block.text = htmlContent
     block.children = []
     const toolBar = this.createToolBar(HTML_TOOLS, 'html')
-    const codeContainer = this.createCodeInHtml(htmlContent, pos)
+    const codeContainer = this.createCodeInHtml(htmlContent, range)
     this.appendChild(block, toolBar)
     this.appendChild(block, codeContainer)
     return codeContainer.children[0]

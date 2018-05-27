@@ -21,14 +21,21 @@ class Aganippe {
   constructor (container, options) {
     const {
       focusMode = false, theme = 'light', markdown = '', preferLooseListItem = true,
-      autoPairBracket = true, autoPairMarkdownSyntax = true, autoPairQuote = true
+      autoPairBracket = true, autoPairMarkdownSyntax = true, autoPairQuote = true, bulletListMarker = '-'
     } = options
     this.container = container
     const eventCenter = this.eventCenter = new EventCenter()
     const floatBox = this.floatBox = new FloatBox(eventCenter)
     const tablePicker = this.tablePicker = new TablePicker(eventCenter)
     this.contentState = new ContentState({
-      eventCenter, floatBox, tablePicker, preferLooseListItem, autoPairBracket, autoPairMarkdownSyntax, autoPairQuote
+      eventCenter,
+      floatBox,
+      tablePicker,
+      preferLooseListItem,
+      autoPairBracket,
+      autoPairMarkdownSyntax,
+      autoPairQuote,
+      bulletListMarker
     })
     this.emoji = new Emoji() // emoji instance: has search(text) clear() methods.
     this.focusMode = focusMode
@@ -67,11 +74,13 @@ class Aganippe {
     this.dispatchArrow()
     this.dispatchBackspace()
     this.dispatchEnter()
+    this.dispatchSelection()
     this.dispatchUpdateState()
     this.dispatchCopyCut()
     this.dispatchTableToolBar()
     this.dispatchCodeBlockClick()
     this.htmlPreviewClick()
+    this.mathPreviewClick()
 
     contentState.listenForPathChange()
 
@@ -280,6 +289,17 @@ class Aganippe {
     eventCenter.attachDOMEvent(container, 'keydown', handler)
   }
 
+  dispatchSelection (event) {
+    const { container, eventCenter } = this
+    const handler = event => {
+      if (event.ctrlKey && event.key === 'a') {
+        this.contentState.tableCellHandler(event)
+      }
+    }
+
+    eventCenter.attachDOMEvent(container, 'keydown', handler)
+  }
+
   // dispatch arrow event
   dispatchArrow () {
     const { container, eventCenter } = this
@@ -359,7 +379,7 @@ class Aganippe {
           eventCenter.dispatch('selectionChange', selectionChanges)
           eventCenter.dispatch('selectionFormats', formats)
           this.dispatchChange()
-        }, 1000)
+        })
       }
     }
 
@@ -404,6 +424,21 @@ class Aganippe {
         event.preventDefault()
         event.stopPropagation()
         this.contentState.handleHtmlBlockClick(htmlPreview)
+      }
+    }
+
+    eventCenter.attachDOMEvent(container, 'click', handler)
+  }
+
+  mathPreviewClick () {
+    const { eventCenter, container } = this
+    const handler = event => {
+      const target = event.target
+      const mathFigure = isInElement(target, 'ag-multiple-math-block')
+      if (mathFigure && !mathFigure.classList.contains(CLASS_OR_ID['AG_ACTIVE'])) {
+        event.preventDefault()
+        event.stopPropagation()
+        this.contentState.handleMathBlockClick(mathFigure)
       }
     }
 

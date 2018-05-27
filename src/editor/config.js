@@ -2,7 +2,10 @@ import { generateKeyHash, genUpper2LowerKeyHash, getLongUniqueId } from './utils
 import htmlTags from 'html-tags'
 import voidHtmlTags from 'html-tags/void'
 
-export const UNDO_DEPTH = 100
+// [0.25, 0.5, 1, 2, 4, 8] <—?—> [256M, 500M/768M, 1G/1000M, 2G, 4G, 8G]
+// Electron 2.0.2 not support yet! So give a default value 4
+export const DEVICE_MEMORY = navigator.deviceMemory || 4 // Get the divice memory number(Chrome >= 63)
+export const UNDO_DEPTH = DEVICE_MEMORY >= 4 ? 100 : 50
 export const HAS_TEXT_BLOCK_REG = /^(h\d|span|th|td|hr|pre)/i
 export const VOID_HTML_TAGS = voidHtmlTags
 export const HTML_TAGS = htmlTags
@@ -75,8 +78,10 @@ export const CLASS_OR_ID = genUpper2LowerKeyHash([
   'AG_EMOJI_MARKED_TEXT',
   'AG_CODE_BLOCK',
   'AG_HTML_BLOCK',
+  'AG_HTML_ESCAPE',
   'AG_FRONT_MATTER',
   'AG_FRONT_MATTER_LINE',
+  'AG_MULTIPLE_MATH_LINE',
   'AG_CODEMIRROR_BLOCK',
   'AG_SHOW_PREVIEW',
   'AG_HTML_PREVIEW',
@@ -110,7 +115,11 @@ export const CLASS_OR_ID = genUpper2LowerKeyHash([
   'AG_MATH_TEXT',
   'AG_MATH_RENDER',
   'AG_MATH_ERROR',
+  'AG_MATH_EMPTY',
   'AG_MATH_MARKER',
+  'AG_MATH_PREVIEW',
+  'AG_MULTIPLE_MATH_BLOCK',
+  'AG_MULTIPLE_MATH',
   'AG_LOOSE_LIST_ITEM',
   'AG_TIGHT_LIST_ITEM',
   'AG_HTML_TAG',
@@ -162,9 +171,9 @@ export const htmlBeautifyConfig = {
 
 export const CURSOR_DNA = getLongUniqueId()
 
-export const turndownConfig = {
+export const DEFAULT_TURNDOWN_CONFIG = {
   headingStyle: 'atx', // setext or atx
-  bulletListMarker: '*', // -, +, or *
+  bulletListMarker: '-', // -, +, or *
   codeBlockStyle: 'fenced', // fenced or indented
   fence: '```', // ``` or ~~~
   emDelimiter: '*', // _ or *

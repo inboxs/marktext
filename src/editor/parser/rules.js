@@ -1,9 +1,12 @@
+import { escapeCharacters } from './escapeCharacter'
+
 /* eslint-disable no-useless-escape */
 export const beginRules = {
   'hr': /^(\*{3,}$|^\-{3,}$|^\_{3,}$)/,
   'code_fense': /^(`{3,})([^`]*)$/,
   'header': /(^\s{0,3}#{1,6}(\s{1,}|$))/,
-  'display_math': /^(\$\$)([^\$]*?[^\$\\])(\\*)\1$/
+  'display_math': /^(\$\$)([^\$]*?[^\$\\])(\\*)\1$/,
+  'multiple_math': /^(\$\$)$/
 }
 
 export const inlineRules = {
@@ -21,6 +24,7 @@ export const inlineRules = {
   'a_link': /^(<a[\s\S]*href\s*=\s*("|')(.+?)\2(?=\s|>)[\s\S]*(?!\\)>)([\s\S]*)(<\/a>)/, // can nest
   'html_image': /^(<img\s([\s\S]*?src[\s\S]+?)(?!\\)>)/,
   'html_tag': /^(<!--[\s\S]*?-->|<\/?[a-zA-Z\d-]+[\s\S]*?(?!\\)>)/,
+  'html_escape': new RegExp(`^(${escapeCharacters.join('|')})`, 'i'),
   'hard_line_break': /^(\s{2,})$/
 }
 /* eslint-enable no-useless-escape */

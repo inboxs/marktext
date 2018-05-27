@@ -1,5 +1,5 @@
 import selection from '../selection'
-import { PARAGRAPH_TYPES, turndownConfig } from '../config'
+import { PARAGRAPH_TYPES, DEFAULT_TURNDOWN_CONFIG } from '../config'
 import ExportMarkdown from '../utils/exportMarkdown'
 
 const LINE_BREAKS_REG = /\n/
@@ -35,7 +35,7 @@ const paragraphCtrl = ContentState => {
     if (start.type === 'pre' && end.type === 'pre' && startBlock.functionType !== 'frontmatter') {
       const preElement = document.querySelector(`#${start.key}`)
       const { top } = preElement.getBoundingClientRect()
-      const { line } = start.block.pos
+      const { line } = start.block.selection.anchor
       cursorCoords.y = top + line * lineHeight * fontSize
     }
 
@@ -210,9 +210,9 @@ const paragraphCtrl = ContentState => {
         this.appendChild(codeBlock, line)
       }
 
-      const { key } = codeBlock.children[codeBlock.pos.line]
-      const offset = codeBlock.pos.ch
-      delete codeBlock.pos
+      const { key } = codeBlock.children[codeBlock.selection.anchor.line]
+      const offset = codeBlock.selection.ahchor.ch
+      delete codeBlock.selection
       delete codeBlock.history
       delete codeBlock.lang
       delete codeBlock.coords
@@ -230,7 +230,10 @@ const paragraphCtrl = ContentState => {
           startBlock.text = startBlock.children.map(line => line.text).join('\n')
           const line = startBlock.children.findIndex(line => line.key === start.key)
           const ch = start.offset
-          startBlock.pos = { line, ch }
+          startBlock.selection = {
+            anchor: { line, ch },
+            head: { line, ch }
+          }
           startBlock.children = []
         }
         const { key } = startBlock
@@ -315,6 +318,27 @@ const paragraphCtrl = ContentState => {
     }
   }
 
+  ContentState.prototype.insertMathBlock = function () {
+    const { start, end } = selection.getCursorRange()
+    if (start.key !== end.key) return
+    let block = this.getBlock(start.key)
+    if (block.type === 'span') {
+      block = this.getParent(block)
+    }
+    const mathBlock = this.createMathBlock()
+    this.insertAfter(mathBlock, block)
+    if (block.type === 'p' && block.children.length === 1 && !block.children[0].text) {
+      this.removeBlock(block)
+    }
+    const cursorBlock = mathBlock.children[0].children[0]
+    const { key } = cursorBlock
+    const offset = 0
+    this.cursor = {
+      start: { key, offset },
+      end: { key, offset }
+    }
+  }
+
   ContentState.prototype.updateParagraph = function (paraType) {
     const { start, end } = selection.getCursorRange()
     const block = this.getBlock(start.key)
@@ -341,6 +365,10 @@ const paragraphCtrl = ContentState => {
       }
       case 'blockquote': {
         this.handleQuoteMenu()
+        break
+      }
+      case 'mathblock': {
+        this.insertMathBlock()
         break
       }
       case 'heading 1':
@@ -378,7 +406,7 @@ const paragraphCtrl = ContentState => {
         const newText = '#'.repeat(newLevel) + ` ${partText}`
         if (block.type === 'span' && newType !== 'p') {
           const header = this.createBlock(newType, newText)
-          header.headingStyle = turndownConfig.headingStyle
+          header.headingStyle = DEFAULT_TURNDOWN_CONFIG.headingStyle
           key = header.key
           const parent = this.getParent(block)
           if (this.isOnlyChild(block)) {
@@ -410,7 +438,7 @@ const paragraphCtrl = ContentState => {
           this.removeBlock(block)
         } else {
           const newHeader = this.createBlock(newType, newText)
-          newHeader.headingStyle = turndownConfig.headingStyle
+          newHeader.headingStyle = DEFAULT_TURNDOWN_CONFIG.headingStyle
           key = newHeader.key
           this.insertAfter(newHeader, block)
           this.removeBlock(block)

@@ -1,5 +1,8 @@
 /**
- * Before you edit or update codes in this file, make sure you have read the
+ * Hi contributors!
+ *
+ * Before you edit or update codes in this file,
+ * make sure you have read this bellow:
  * Commonmark Spec: https://spec.commonmark.org/0.28/
  * and GitHub Flavored Markdown Spec: https://github.github.com/gfm/
  * The output markdown needs to obey the standards of the two Spec.
@@ -52,6 +55,8 @@ class ExportMarkdown {
             result.push(this.normalizeTable(table, indent))
           } else if (block.functionType === 'html') {
             result.push(this.normalizeHTML(block, indent))
+          } else if (block.functionType === 'multiplemath') {
+            result.push(this.normalizeMultipleMath(block, indent))
           }
           break
 
@@ -156,6 +161,16 @@ class ExportMarkdown {
     return result.join('')
   }
 
+  normalizeMultipleMath (block, /* figure */ indent) {
+    const result = []
+    result.push('$$\n')
+    for (const line of block.children[0].children) {
+      result.push(`${line.text}\n`)
+    }
+    result.push('$$\n')
+    return result.join('')
+  }
+
   normalizeCodeBlock (block, indent) {
     const result = []
     const textList = block.text.split(LINE_BREAKS)
@@ -245,11 +260,12 @@ class ExportMarkdown {
   normalizeListItem (block, indent) {
     const result = []
     const listInfo = this.listType[this.listType.length - 1]
-    let { children } = block
+    let { children, bulletListItemMarker } = block
     let itemMarker
 
     if (listInfo.type === 'ul') {
-      itemMarker = '- '
+      // console.log(block)
+      itemMarker = bulletListItemMarker ? `${bulletListItemMarker} ` : '- '
       if (block.listItemType === 'task') {
         const firstChild = children[0]
         itemMarker += firstChild.checked ? '[x] ' : '[ ] '

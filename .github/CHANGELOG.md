@@ -1,4 +1,4 @@
-### 0.11.33
+### 0.11.38
 
 **:cactus:Feature**
 
@@ -9,6 +9,9 @@
 - feature: Click filename to `rename` or `save` in title bar(**macOS ONLY**).
 - feature: Support YAML Front Matter
 - feature: Support `setext` heading but the default heading style is `atx`
+- feature: User list item marker setting in preference file.
+- feature: Select text from selected table (cell) only if you press Ctrl+A
+- feature: Support Multiple lines math #242
 
 **:butterfly:Optimization**
 
@@ -42,6 +45,7 @@
 - fix: #251
 - fix: #248 dark background disappears when export PDF (#252)
 - fix: #231 cut not work in code block
+- fix: #274 can not selection codes in code block when the cursor is outside of code block.
 
 ### 0.10.21
 

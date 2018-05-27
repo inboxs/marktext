@@ -101,6 +101,9 @@ const enterCtrl = ContentState => {
       } else {
         newBlock = this.createBlockLi()
         newBlock.listItemType = parent.listItemType
+        if (parent.listItemType === 'bullet') {
+          newBlock.bulletListItemMarker = parent.bulletListItemMarker
+        }
       }
       newBlock.isLooseListItem = parent.isLooseListItem
       this.insertAfter(newBlock, parent)
@@ -147,7 +150,7 @@ const enterCtrl = ContentState => {
       return
     }
     // handle cursor in code block
-    if (block.type === 'pre' && block.functionType !== 'frontmatter') {
+    if (block.type === 'pre' && block.functionType === 'code') {
       return
     }
 
@@ -194,15 +197,13 @@ const enterCtrl = ContentState => {
     // only cursor in `line block` can create `soft line break` and `hard line break`
     if (
       (event.shiftKey && block.type === 'span') ||
-      (block.type === 'span' && block.functionType === 'frontmatter')
+      (block.type === 'span' && /frontmatter|multiplemath/.test(block.functionType))
     ) {
       const { text } = block
       const newLineText = text.substring(start.offset)
       block.text = text.substring(0, start.offset)
       const newLine = this.createBlock('span', newLineText)
-      if (block.functionType === 'frontmatter') {
-        newLine.functionType = 'frontmatter'
-      }
+      newLine.functionType = block.functionType
       this.insertAfter(newLine, block)
       const { key } = newLine
       const offset = 0
@@ -310,6 +311,9 @@ const enterCtrl = ContentState => {
             newBlock = this.chopBlockByCursor(block.children[0], start.key, start.offset)
             newBlock = this.createBlockLi(newBlock)
             newBlock.listItemType = block.listItemType
+            if (block.listItemType === 'bullet') {
+              newBlock.bulletListItemMarker = block.bulletListItemMarker
+            }
           }
           newBlock.isLooseListItem = block.isLooseListItem
         }
@@ -326,6 +330,9 @@ const enterCtrl = ContentState => {
           } else {
             newBlock = this.createBlockLi()
             newBlock.listItemType = block.listItemType
+            if (block.listItemType === 'bullet') {
+              newBlock.bulletListItemMarker = block.bulletListItemMarker
+            }
           }
           newBlock.isLooseListItem = block.isLooseListItem
         } else {
@@ -338,7 +345,7 @@ const enterCtrl = ContentState => {
         } else {
           if (block.type === 'p') {
             const lastLine = block.children[block.children.length - 1]
-            if (lastLine.text.trim() === '') {
+            if (lastLine.text === '') {
               this.removeBlock(lastLine)
             }
           }
@@ -365,6 +372,7 @@ const enterCtrl = ContentState => {
     const blockNeedFocus = this.codeBlockUpdate(preParagraphBlock)
     let tableNeedFocus = this.tableBlockUpdate(preParagraphBlock)
     let htmlNeedFocus = this.updateHtmlBlock(preParagraphBlock)
+    let mathNeedFocus = this.updateMathBlock(preParagraphBlock)
     let cursorBlock
 
     switch (true) {
@@ -376,6 +384,9 @@ const enterCtrl = ContentState => {
         break
       case !!htmlNeedFocus:
         cursorBlock = htmlNeedFocus
+        break
+      case !!mathNeedFocus:
+        cursorBlock = mathNeedFocus
         break
       default:
         cursorBlock = newBlock

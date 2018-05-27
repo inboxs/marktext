@@ -101,7 +101,7 @@ const tokenizerFac = (src, beginRules, inlineRules, pos = 0, top) => {
   }
 
   if (beginRules && pos === 0) {
-    const beginR = ['header', 'hr', 'code_fense', 'display_math']
+    const beginR = ['header', 'hr', 'code_fense', 'display_math', 'multiple_math']
 
     for (const ruleName of beginR) {
       const to = beginRules[ruleName].exec(src)
@@ -290,9 +290,29 @@ const tokenizerFac = (src, beginRules, inlineRules, pos = 0, top) => {
       }
     }
 
+    // html escape
+    const htmlEscapeTo = inlineRules['html_escape'].exec(src)
+    if (htmlEscapeTo) {
+      const len = htmlEscapeTo[0].length
+      pushPending()
+      tokens.push({
+        type: 'html_escape',
+        escapeCharacter: htmlEscapeTo[1],
+        parent: tokens,
+        range: {
+          start: pos,
+          end: pos + len
+        }
+      })
+      src = src.substring(len)
+      pos = pos + len
+      continue
+    }
+
     // html-tag
     const htmlTo = inlineRules['html_tag'].exec(src)
     if (htmlTo) {
+      const len = htmlTo[0].length
       pushPending()
       tokens.push({
         type: 'html_tag',
@@ -300,11 +320,11 @@ const tokenizerFac = (src, beginRules, inlineRules, pos = 0, top) => {
         parent: tokens,
         range: {
           start: pos,
-          end: pos + htmlTo[0].length
+          end: pos + len
         }
       })
-      src = src.substring(htmlTo[0].length)
-      pos = pos + htmlTo[0].length
+      src = src.substring(len)
+      pos = pos + len
       continue
     }
 
@@ -464,7 +484,11 @@ export const generator = tokens => {
       case 'html_tag':
         result += token.tag
         break
+      case 'html_escape':
+        result += token.escapeCharacter
+        break
       case 'tail_header':
+      case 'multiple_math':
         result += token.marker
         break
       case 'hard_line_break':

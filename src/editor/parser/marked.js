@@ -29,7 +29,8 @@ var block = {
   table: noop,
   paragraph: /^((?:[^\n]+\n?(?!hr|heading|lheading|blockquote|tag|def))+)\n*/,
   text: /^[^\n]+/,
-  frontmatter: /^---\n([\s\S]+?)---(?:\n+|$)/
+  frontmatter: /^---\n([\s\S]+?)---(?:\n+|$)/,
+  multiplemath: /^\$\$\n([\s\S]+?)\n\$\$(?:\n+|$)/
 };
 
 block.checkbox = /^\[([ x])\] +/;
@@ -195,16 +196,25 @@ Lexer.prototype.token = function(src, top, bq) {
       continue;
     }
 
+    // multiple line math
+    if (cap = this.rules.multiplemath.exec(src)) {
+      src = src.substring(cap[0].length)
+      this.tokens.push({
+        type: 'multiplemath',
+        text: cap[1]
+      })
+    }
+
     // fences (gfm)
     if (cap = this.rules.fences.exec(src)) {
-      src = src.substring(cap[0].length);
+      src = src.substring(cap[0].length)
       this.tokens.push({
         type: 'code',
         codeBlockStyle: 'fenced',
         lang: cap[2],
         text: cap[3]
-      });
-      continue;
+      })
+      continue
     }
 
     // heading
@@ -297,8 +307,7 @@ Lexer.prototype.token = function(src, top, bq) {
     // list
     if (cap = this.rules.tasklist.exec(src) || this.rules.orderlist.exec(src) || this.rules.bulletlist.exec(src)) {
       src = src.substring(cap[0].length);
-      bull = cap[2];
-
+      bull = cap[2]
       const ordered = bull.length > 1 && /\d/.test(bull)
 
       this.tokens.push({
@@ -387,6 +396,7 @@ Lexer.prototype.token = function(src, top, bq) {
         this.tokens.push({
           checked: checked,
           listItemType: bull.length > 1 ? (/\d/.test(bull) ? 'order' : 'task') : 'bullet',
+          bulletListItemMarker: /\d/.test(bull) ? '' : bull.charAt(0),
           type: loose ?
             'loose_item_start' :
             'list_item_start'
@@ -822,6 +832,10 @@ Renderer.prototype.frontmatter = function (text) {
   return `<pre class="front-matter">\n${text}</pre>\n`
 }
 
+Renderer.prototype.multiplemath = function (text) {
+  return `<pre class="multiple-math">\n${text}</pre>\n`
+}
+
 Renderer.prototype.code = function (code, lang, escaped, codeBlockStyle) {
   if (this.options.highlight) {
     var out = this.options.highlight(code, lang);
@@ -875,31 +889,31 @@ Renderer.prototype.list = function(body, ordered, start, taskList) {
   return '<' + type + classes + startatt + '>\n' + body + '</' + type + '>\n'
 }
 
-Renderer.prototype.listitem = function(text, checked, listItemType, loose) {
-  var classes;
+Renderer.prototype.listitem = function(text, checked, listItemType, bulletListItemMarker, loose) {
+  let classes
   switch (listItemType) {
     case 'order':
-      classes = ' class="order-list-item';
+      classes = ' class="order-list-item'
       break;
     case 'task':
-      classes = ' class="task-list-item';
+      classes = ' class="task-list-item'
       break;
     case 'bullet':
-      classes = ' class="bullet-list-item';
+      classes = ' class="bullet-list-item'
       break;
     default:
       throw new
-      Error('Invalid state');
+      Error('Invalid state')
   }
 
   // "tight-list-item" is only used to remove <p> padding
   classes += loose ? ` ${CLASS_OR_ID['AG_LOOSE_LIST_ITEM']}"` : ` ${CLASS_OR_ID['AG_TIGHT_LIST_ITEM']}"`;
 
   if (checked === undefined) {
-    return '<li ' + classes + '>' + text + '</li>\n';
+    return '<li ' + classes + ' data-marker="' + bulletListItemMarker + '">' + text + '</li>\n';
   }
 
-  return '<li ' + classes + '>' +
+  return '<li ' + classes + ' data-marker="' + bulletListItemMarker + '">' +
     '<input type="checkbox" class="task-list-item-checkbox"' +
     (checked ? ' checked' : '') +
     '> ' +
@@ -1073,13 +1087,17 @@ Parser.prototype.tok = function() {
         return this.renderer.hr()
       }
     case 'heading': {
-        return this.renderer.heading(
-          this.inline.output(this.token.text),
-          this.token.depth,
-          this.token.text,
-          this.token.headingStyle
-        )
-      }
+      return this.renderer.heading(
+        this.inline.output(this.token.text),
+        this.token.depth,
+        this.token.text,
+        this.token.headingStyle
+      )
+    }
+    case 'multiplemath': {
+      const { text } = this.token
+      return this.renderer.multiplemath(text)
+    }
     case 'code':
       {
         const { codeBlockStyle, text, lang, escaped } = this.token
@@ -1152,29 +1170,27 @@ Parser.prototype.tok = function() {
       }
     case 'list_item_start':
       {
-        var body = '',
-          checked = this.token.checked,
-          listItemType = this.token.listItemType;
+        let body = ''
+        const { checked, listItemType, bulletListItemMarker } = this.token
 
         while (this.next().type !== 'list_item_end') {
           body += this.token.type === 'text' ?
             this.parseText() :
-            this.tok();
+            this.tok()
         }
 
-        return this.renderer.listitem(body, checked, listItemType, false);
+        return this.renderer.listitem(body, checked, listItemType, bulletListItemMarker, false)
       }
     case 'loose_item_start':
       {
-        var body = '',
-          checked = this.token.checked,
-          listItemType = this.token.listItemType;
+        let body = ''
+        const { checked, listItemType, bulletListItemMarker } = this.token
 
         while (this.next().type !== 'list_item_end') {
-          body += this.tok();
+          body += this.tok()
         }
 
-        return this.renderer.listitem(body, checked, listItemType, true);
+        return this.renderer.listitem(body, checked, listItemType, bulletListItemMarker, true)
       }
     case 'html':
       {

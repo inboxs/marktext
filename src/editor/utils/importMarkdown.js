@@ -4,52 +4,14 @@
  * Both of them add a p block in li block, use the CSS style to distinguish loose and tight.
  */
 import parse5 from 'parse5'
-import TurndownService from 'turndown'
 import marked from '../parser/marked'
 import ExportMarkdown from './exportMarkdown'
+import TurndownService, { usePluginAddRules } from './turndownService'
 
 // To be disabled rules when parse markdown, Because content state don't need to parse inline rules
-import { turndownConfig, CLASS_OR_ID, CURSOR_DNA, TABLE_TOOLS, BLOCK_TYPE7, LINE_BREAK } from '../config'
-
-const turndownPluginGfm = require('turndown-plugin-gfm')
+import { CLASS_OR_ID, CURSOR_DNA, TABLE_TOOLS, BLOCK_TYPE7 } from '../config'
 
 const LINE_BREAKS_REG = /\n/
-
-// turn html to markdown
-const turndownService = new TurndownService(turndownConfig)
-const gfm = turndownPluginGfm.gfm
-// Use the gfm plugin
-turndownService.use(gfm)
-// because the strikethrough rule in gfm is single `~`, So need rewrite the strikethrough rule.
-turndownService.addRule('strikethrough', {
-  filter: ['del', 's', 'strike'],
-  replacement (content) {
-    return '~~' + content + '~~'
-  }
-})
-
-// handle `soft line break` and `hard line break`
-// add `LINE_BREAK` to the end of soft line break and hard line break.
-turndownService.addRule('lineBreak', {
-  filter (node, options) {
-    return node.nodeName === 'SPAN' && node.classList.contains(CLASS_OR_ID['AG_LINE']) && node.nextElementSibling
-  },
-  replacement (content, node, options) {
-    return content + LINE_BREAK
-  }
-})
-
-// remove `\` in text when paste
-turndownService.addRule('normalText', {
-  filter (node, options) {
-    return (node.nodeName === 'SPAN' &&
-      node.classList.contains(CLASS_OR_ID['AG_EMOJI_MARKED_TEXT'])) ||
-      node.classList.contains('plain-text')
-  },
-  replacement (content, node, options) {
-    return content.replace(/\\(?!\\)/g, '')
-  }
-})
 
 const checkIsHTML = value => {
   const trimedValue = value.trim()
@@ -103,12 +65,15 @@ const importRegister = ContentState => {
       return { lang, codeBlockStyle }
     }
 
-    const isFrontMatter = node => {
+    const getPreFunctionType = node => {
+      let type = 'code'
       const classAttr = node.attrs.filter(attr => attr.name === 'class')[0]
       if (classAttr && classAttr.value) {
-        return /front-matter/.test(classAttr.value)
+        const { value } = classAttr
+        if (/front-matter/.test(value)) type = 'frontmatter'
+        if (/multiple-math/.test(value)) type = 'multiplemath'
       }
-      return false
+      return type
     }
 
     const getRowColumnCount = childNodes => {
@@ -215,9 +180,16 @@ const importRegister = ContentState => {
           case 'li':
             const isTask = child.attrs.some(attr => attr.name === 'class' && attr.value.includes('task-list-item'))
             const isLoose = child.attrs.some(attr => attr.name === 'class' && attr.value.includes(CLASS_OR_ID['AG_LOOSE_LIST_ITEM']))
+
             block = this.createBlock('li')
-            block.listItemType = parent.nodeName === 'ul' ? (isTask ? 'task' : 'bullet') : 'order'
+            block.listItemType = parent.type === 'ul' ? (isTask ? 'task' : 'bullet') : 'order'
             block.isLooseListItem = isLoose
+
+            if (/task|bullet/.test(block.listItemType)) {
+              const bulletListItemMarker = child.attrs.find(attr => attr.name === 'data-marker').value
+              if (bulletListItemMarker) block.bulletListItemMarker = bulletListItemMarker
+            }
+
             this.appendChild(parent, block)
             travel(block, child.childNodes)
             break
@@ -250,17 +222,20 @@ const importRegister = ContentState => {
             break
 
           case 'pre':
-            const frontMatter = isFrontMatter(child)
-            if (frontMatter) {
+            const functionType = getPreFunctionType(child)
+            if (functionType === 'frontmatter') {
               value = child.childNodes[0].value
               block = this.createBlock('pre')
               const lines = value.replace(/^\s+/, '').split(LINE_BREAKS_REG).map(line => this.createBlock('span', line))
               for (const line of lines) {
-                line.functionType = 'frontmatter'
+                line.functionType = functionType
                 this.appendChild(block, line)
               }
-              block.functionType = 'frontmatter'
-            } else {
+              block.functionType = functionType
+            } else if (functionType === 'multiplemath') {
+              value = child.childNodes[0].value
+              block = this.createMathBlock(value)
+            } else if (functionType === 'code') {
               const codeNode = child.childNodes[0]
               const { lang, codeBlockStyle } = getLangAndType(codeNode)
               value = codeNode.childNodes[0].value
@@ -331,6 +306,10 @@ const importRegister = ContentState => {
   }
   // transform `paste's text/html data` to content state blocks.
   ContentState.prototype.html2State = function (html) {
+    // turn html to markdown
+    const { turndownConfig } = this
+    const turndownService = new TurndownService(turndownConfig)
+    usePluginAddRules(turndownService)
     // remove double `\\` in Math but I dont know why there are two '\' when paste. @jocs
     const markdown = turndownService.turndown(html).replace(/(\\)\\/g, '$1')
     return this.getStateFragment(markdown)
@@ -370,19 +349,29 @@ const importRegister = ContentState => {
     // set cursor
     const travel = blocks => {
       for (const block of blocks) {
-        const { key, text, children } = block
+        const { key, text, children, editable, type, functionType } = block
         if (text) {
           const offset = text.indexOf(CURSOR_DNA)
           if (offset > -1) {
             block.text = text.substring(0, offset) + text.substring(offset + CURSOR_DNA.length)
-            this.cursor = {
-              start: { key, offset },
-              end: { key, offset }
+            if (editable) {
+              this.cursor = {
+                start: { key, offset },
+                end: { key, offset }
+              }
+              // handle cursor in Math block, need to remove `CURSOR_DNA` in preview block
+              if (type === 'span' && functionType === 'multiplemath') {
+                const mathPreview = this.getNextSibling(this.getParent(block))
+                const { math } = mathPreview
+                const offset = math.indexOf(CURSOR_DNA)
+                if (offset > -1) {
+                  mathPreview.math = math.substring(0, offset) + math.substring(offset + CURSOR_DNA.length)
+                }
+              }
+              return
             }
-            return
           }
-        }
-        if (children.length) {
+        } else if (children.length) {
           travel(children)
         }
       }

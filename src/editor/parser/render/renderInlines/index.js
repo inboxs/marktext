@@ -22,6 +22,8 @@ import text from './text'
 import del from './del'
 import em from './em'
 import strong from './strong'
+import htmlEscape from './htmlEscape'
+import multipleMath from './multipleMath'
 
 export default {
   backlashInToken,
@@ -47,5 +49,7 @@ export default {
   text,
   del,
   em,
-  strong
+  strong,
+  htmlEscape,
+  multipleMath
 }
